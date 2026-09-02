@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: meridian-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  user-service:
+    build: ./user-service
+    container_name: meridian-user-service
+    ports:
+      - "8081:8081"
+    environment:
+      MONGO_URI: mongodb://mongo:27017/userdb
+      JWT_SECRET: local-dev-secret-change-in-production-min-32-chars
+      PORT: 8081
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  consultation-service:
+    build: ./consultation-service
+    container_name: meridian-consultation-service
+    ports:
+      - "8082:8082"
+    environment:
+      MONGO_URI: mongodb://mongo:27017/consultationdb
+      JWT_SECRET: local-dev-secret-change-in-production-min-32-chars
+      PORT: 8082
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  notification-service:
+    build: ./notification-service
+    container_name: meridian-notification-service
+    ports:
+      - "8083:8083"
+    environment:
+      MONGO_URI: mongodb://mongo:27017/notificationdb
+      JWT_SECRET: local-dev-secret-change-in-production-min-32-chars
+      PORT: 8083
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: meridian-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      USER_SERVICE_URL: http://user-service:8081
+      CONSULTATION_SERVICE_URL: http://consultation-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-service:8083
+    depends_on:
+      - user-service
+      - consultation-service
+      - notification-service
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8080
+    container_name: meridian-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+
+volumes:
+  mongo-data:
